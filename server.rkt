@@ -41,19 +41,35 @@
 (define (render-posts a-blog)
   `(div ((class "posts")) ,@(map render-post a-blog)))
 
+; parse-post: bindings -> post
+; Extracts a post out of the bindings.
+(define (parse-post bindings)
+  (post (extract-binding/single 'title bindings)
+        (extract-binding/single 'body bindings)))
+
 ; render-blog-page: blog request -> response
 ; Consumes a blog and a request, and produces an HTML page
 ; of the content of the blog.
 (define (render-blog-page a-blog request)
-  (response/xexpr
-   `(html (head (title "My Blog"))
-          (body
-           (h1 "My Blog")
-           ,(render-posts a-blog)
-           (form
-            (input ((name "title")))
-            (input ((name "body")))
-            (input ((type "submit"))))))))
+  
+  (define (response-generator embed/url)
+    (response/xexpr
+     `(html (head (title "My Blog"))
+            (body
+             (h1 "My Blog")
+             ,(render-posts a-blog)
+             (form ((action
+                     ,(embed/url insert-post-handler)))
+                   (input ((name "title")))
+                   (input ((name "body")))
+                   (input ((type "submit"))))))))
+ 
+  (define (insert-post-handler request)
+    (render-blog-page
+     (cons (parse-post (request-bindings request)) a-blog)
+     request))
+  
+  (send/suspend/dispatch response-generator))
 
 ; can-parse-post?: bindings -> boolean
 ; Produces true if bindings contains values for 'title and 'body.
@@ -61,20 +77,8 @@
   (and (exists-binding? 'title bindings)
        (exists-binding? 'body bindings)))
 
-; parse-post: bindings -> post
-; Consumes a bindings, and produces a post out of the bindings.
-(define (parse-post bindings)
-  (post (extract-binding/single 'title bindings)
-        (extract-binding/single 'body bindings)))
-
 ; start: request -> response
 ; Consumes a request, and produces a page that displays all of the
 ; web content.
 (define (start request)
-  (define a-blog
-    (cond [(can-parse-post? (request-bindings request))
-           (cons (parse-post (request-bindings request))
-                 BLOG)]
-          [else
-           BLOG]))
-  (render-blog-page a-blog request))
+  (render-blog-page BLOG request))
